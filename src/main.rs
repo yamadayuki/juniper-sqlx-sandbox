@@ -1,12 +1,13 @@
-use std::sync::Arc;
-
 use actix_web::{
     get, route,
     web::{self, Data},
     App, HttpResponse, HttpServer, Responder,
 };
 use juniper::http::{graphiql::graphiql_source, GraphQLRequest};
+use std::sync::Arc;
 
+mod context;
+mod db;
 mod schema;
 
 #[get("/healthz")]
@@ -25,20 +26,32 @@ async fn graphql_playground() -> impl Responder {
 
 #[route("/graphql", method = "GET", method = "POST")]
 async fn graphql(
+    pool: web::Data<db::Pool>,
     schema: web::Data<schema::Schema>,
     data: web::Json<GraphQLRequest>,
 ) -> impl Responder {
-    let res = data.execute(&schema, &()).await;
+    let ctx = context::Context {
+        pool: pool.get_ref().to_owned(),
+    };
+
+    let res = data.execute(&schema, &ctx).await;
     HttpResponse::Ok().json(res)
 }
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect("postgres://postgres:postgres@localhost:5432/juniper-sqlx")
+        .await
+        .expect("Failed to connect to database");
+
     let schema = Arc::new(schema::create_schema());
 
     HttpServer::new(move || {
         App::new()
             .app_data(Data::from(schema.clone()))
+            .app_data(Data::new(pool.clone()))
             .service(graphql)
             .service(graphql_playground)
             .service(healthz)

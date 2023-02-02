@@ -1,7 +1,9 @@
+use crate::context::Context;
 use juniper::{EmptyMutation, EmptySubscription, GraphQLEnum, GraphQLObject, RootNode};
 
-#[derive(GraphQLEnum, Debug, Clone, Copy)]
+#[derive(GraphQLEnum, Debug, Clone, Copy, sqlx::Type)]
 #[graphql(description = "Represents a user role")]
+#[sqlx(type_name = "role", rename_all = "lowercase")]
 enum Role {
     Admin,
     Editor,
@@ -13,13 +15,13 @@ struct Actor {
     id: i32,
     name: String,
     role: Role,
-    posts: Vec<Post>,
+    // posts: Vec<Post>,
 }
 
-#[juniper::graphql_object]
+#[juniper::graphql_object(Context = Context)]
 impl Actor {
-    fn id(&self) -> i32 {
-        self.id * 10
+    fn id(&self, _context: &Context) -> i32 {
+        self.id
     }
 
     fn name(&self) -> String {
@@ -31,7 +33,8 @@ impl Actor {
     }
 
     fn posts(&self) -> Vec<Post> {
-        self.posts.clone()
+        // self.posts.clone()
+        vec![]
     }
 }
 
@@ -43,28 +46,28 @@ struct Post {
 
 pub struct QueryRoot;
 
-#[juniper::graphql_object]
+#[juniper::graphql_object(Context = Context)]
 impl QueryRoot {
-    fn actor() -> Actor {
-        Actor {
-            id: 1,
-            name: "John Doe".to_string(),
-            role: Role::Admin,
-            posts: vec![
-                Post {
-                    id: 1,
-                    title: "Hello World".to_string(),
-                },
-                Post {
-                    id: 2,
-                    title: "New Era".to_string(),
-                },
-            ],
-        }
+    async fn actor(
+        context: &Context,
+        #[graphql(desc = "id of the actor")] id: i32,
+    ) -> Option<Actor> {
+        let actor = sqlx::query_as!(
+            Actor,
+            r#"SELECT id, name, role as "role!: Role" FROM actors WHERE id = $1"#,
+            id
+        )
+        .fetch_optional(&context.pool)
+        .await
+        .unwrap();
+
+        dbg!(&actor);
+
+        actor
     }
 }
 
-pub type Schema = RootNode<'static, QueryRoot, EmptyMutation, EmptySubscription>;
+pub type Schema = RootNode<'static, QueryRoot, EmptyMutation<Context>, EmptySubscription<Context>>;
 
 pub fn create_schema() -> Schema {
     Schema::new(QueryRoot, EmptyMutation::new(), EmptySubscription::new())
