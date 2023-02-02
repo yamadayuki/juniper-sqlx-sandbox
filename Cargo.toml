@@ -8,4 +8,5 @@ edition = "2021"
 [dependencies]
 actix-web = "4.3.0"
 juniper = "0.15.11"
+sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres"] }
 tokio = { version = "1.25.0", features = ["full"] }
