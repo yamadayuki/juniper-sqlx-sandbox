@@ -1,9 +1,9 @@
 use crate::context::Context;
-use juniper::{EmptyMutation, EmptySubscription, GraphQLEnum, GraphQLObject, RootNode};
+use juniper::{EmptySubscription, GraphQLEnum, GraphQLObject, RootNode};
 
 #[derive(GraphQLEnum, Debug, Clone, Copy, sqlx::Type)]
 #[graphql(description = "Represents a user role")]
-#[sqlx(type_name = "role", rename_all = "lowercase")]
+#[sqlx(type_name = "actor_role", rename_all = "lowercase")]
 enum Role {
     Admin,
     Editor,
@@ -67,8 +67,35 @@ impl QueryRoot {
     }
 }
 
-pub type Schema = RootNode<'static, QueryRoot, EmptyMutation<Context>, EmptySubscription<Context>>;
+pub struct MutationRoot;
+
+#[juniper::graphql_object(Context = Context)]
+impl MutationRoot {
+    async fn create_actor(context: &Context, name: String, role: Role) -> Actor {
+        sqlx::query!(
+            r#"INSERT INTO actors (name, role) VALUES ($1, $2)"#,
+            name,
+            role as Role
+        )
+        .execute(&context.pool)
+        .await
+        .unwrap();
+
+        let actor = sqlx::query_as!(
+            Actor,
+            r#"SELECT id, name, role as "role!: Role" FROM actors WHERE name = $1"#,
+            name
+        )
+        .fetch_one(&context.pool)
+        .await
+        .unwrap();
+
+        actor
+    }
+}
+
+pub type Schema = RootNode<'static, QueryRoot, MutationRoot, EmptySubscription<Context>>;
 
 pub fn create_schema() -> Schema {
-    Schema::new(QueryRoot, EmptyMutation::new(), EmptySubscription::new())
+    Schema::new(QueryRoot, MutationRoot, EmptySubscription::new())
 }
