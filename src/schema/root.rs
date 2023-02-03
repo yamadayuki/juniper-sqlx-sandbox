@@ -24,7 +24,7 @@ impl Query {
 
     async fn actor(
         context: &Context,
-        #[graphql(desc = "ID of the actor")] id: i32,
+        #[graphql(desc = "ID of the actor")] id: juniper::ID,
     ) -> FieldResult<Option<Actor>> {
         crate::schema::actor::get_actor(context, id).await
     }

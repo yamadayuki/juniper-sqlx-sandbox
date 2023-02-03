@@ -3,6 +3,8 @@ use super::role::Role;
 use crate::context::Context;
 use chrono::TimeZone;
 
+const ACTOR_ID_PREFIX: &str = "Actor:";
+
 #[derive(Debug)]
 pub(crate) struct Actor {
     pub(crate) id: i32,
@@ -14,8 +16,8 @@ pub(crate) struct Actor {
 
 #[juniper::graphql_object(Context = Context)]
 impl Actor {
-    fn id(&self, _context: &Context) -> i32 {
-        self.id
+    fn id(&self) -> juniper::ID {
+        format!("{ACTOR_ID_PREFIX}:{}", self.id).into()
     }
 
     fn name(&self) -> String {
@@ -42,7 +44,16 @@ impl Actor {
     }
 }
 
-pub(crate) async fn get_actor(context: &Context, id: i32) -> juniper::FieldResult<Option<Actor>> {
+pub(crate) async fn get_actor(
+    context: &Context,
+    id: juniper::ID,
+) -> juniper::FieldResult<Option<Actor>> {
+    if !id.starts_with(ACTOR_ID_PREFIX) {
+        return Ok(None);
+    }
+
+    let id = id.trim_start_matches(ACTOR_ID_PREFIX).parse::<i32>()?;
+
     let actor = sqlx::query_as!(
         Actor,
         r#"SELECT id, name, role as "role!: Role", created_at, updated_at FROM actors WHERE id = $1"#,
@@ -83,10 +94,10 @@ pub(crate) async fn create_actor(
 }
 
 impl juniper_relay_connection::RelayConnectionNode for Actor {
-    type Cursor = i32;
+    type Cursor = String;
 
     fn cursor(&self) -> Self::Cursor {
-        self.id
+        format!("{ACTOR_ID_PREFIX}:{}", self.id)
     }
 
     fn connection_type_name() -> &'static str {
@@ -105,14 +116,30 @@ pub(crate) async fn actors_connection(
     last: Option<i32>,
     before: Option<String>,
 ) -> juniper::FieldResult<juniper_relay_connection::RelayConnection<Actor>> {
-    juniper_relay_connection::RelayConnection::new_async(
+    juniper_relay_connection::RelayConnection::<Actor>::new_async(
         first,
         after,
         last,
         before,
         |after, before, limit| async move {
-            let after = after.unwrap_or(0);
-            let before = before.unwrap_or(i32::MAX);
+            let after = if let Some(after) = after {
+                if after.starts_with(ACTOR_ID_PREFIX) {
+                    after.trim_start_matches(ACTOR_ID_PREFIX).parse::<i32>()?
+                } else {
+                    0
+                }
+            } else {
+                0
+            };
+            let before = if let Some(before) = before {
+                if before.starts_with(ACTOR_ID_PREFIX) {
+                    before.trim_start_matches(ACTOR_ID_PREFIX).parse::<i32>()?
+                } else {
+                    0
+                }
+            } else {
+                i32::MAX
+            };
 
             let query = sqlx::query_as!(
                 Actor,
@@ -125,7 +152,7 @@ pub(crate) async fn actors_connection(
             "#,
                 after,
                 before,
-                limit
+                limit.unwrap_or(10)
             );
 
             let actors = query.fetch_all(&context.pool).await?;
