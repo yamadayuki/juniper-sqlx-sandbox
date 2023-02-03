@@ -44,10 +44,25 @@ struct Post {
     title: String,
 }
 
+#[derive(GraphQLObject, Debug, Clone)]
+#[graphql(name = "_Service")]
+/// This struct is implementation of the Apollo Federation subgraph specification.
+/// see: https://www.apollographql.com/docs/federation/subgraph-spec/
+struct Service {
+    /// Represents the schema of the subgraph. It is a short form of the schema definition language (SDL).
+    sdl: String,
+}
+
 pub struct QueryRoot;
 
 #[juniper::graphql_object(Context = Context)]
 impl QueryRoot {
+    #[graphql(name = "_service")]
+    /// This resolver supports the enhanced introspection query for Apollo Federation.
+    fn _service() -> Service {
+        Service { sdl: get_schema() }
+    }
+
     async fn actor(
         context: &Context,
         #[graphql(desc = "id of the actor")] id: i32,
@@ -98,4 +113,9 @@ pub type Schema = RootNode<'static, QueryRoot, MutationRoot, EmptySubscription<C
 
 pub fn create_schema() -> Schema {
     Schema::new(QueryRoot, MutationRoot, EmptySubscription::new())
+}
+
+pub fn get_schema() -> String {
+    let schema = create_schema();
+    schema.as_schema_language()
 }
