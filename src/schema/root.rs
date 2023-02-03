@@ -18,7 +18,7 @@ impl Query {
     #[graphql(name = "_service")]
     /// This resolver supports the enhanced introspection query for Apollo Federation.
     fn _service() -> FieldResult<Service> {
-        Ok(Service { sdl: get_schema() })
+        Ok(Service { sdl: get_sdl() })
     }
 
     async fn actor(
@@ -44,7 +44,7 @@ pub fn create_schema() -> Schema {
     Schema::new(Query, Mutation, EmptySubscription::new())
 }
 
-pub fn get_schema() -> String {
+pub fn get_sdl() -> String {
     let schema = create_schema();
     schema.as_schema_language()
 }
