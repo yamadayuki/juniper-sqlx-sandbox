@@ -27,7 +27,7 @@ async fn graphql_playground() -> impl Responder {
 #[route("/graphql", method = "GET", method = "POST")]
 async fn graphql(
     pool: web::Data<db::Pool>,
-    schema: web::Data<schema::Schema>,
+    schema: web::Data<schema::root::Schema>,
     data: web::Json<GraphQLRequest>,
 ) -> impl Responder {
     let ctx = context::Context {
@@ -46,7 +46,7 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to connect to database");
 
-    let schema = Arc::new(schema::create_schema());
+    let schema = Arc::new(schema::root::create_schema());
 
     HttpServer::new(move || {
         App::new()

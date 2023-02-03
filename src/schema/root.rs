@@ -1,48 +1,6 @@
 use crate::context::Context;
-use juniper::{EmptySubscription, GraphQLEnum, GraphQLObject, RootNode};
-
-#[derive(GraphQLEnum, Debug, Clone, Copy, sqlx::Type)]
-#[graphql(description = "Represents a user role")]
-#[sqlx(type_name = "actor_role", rename_all = "lowercase")]
-enum Role {
-    Admin,
-    Editor,
-    Viewer,
-}
-
-#[derive(Debug)]
-struct Actor {
-    id: i32,
-    name: String,
-    role: Role,
-    // posts: Vec<Post>,
-}
-
-#[juniper::graphql_object(Context = Context)]
-impl Actor {
-    fn id(&self, _context: &Context) -> i32 {
-        self.id
-    }
-
-    fn name(&self) -> String {
-        self.name.clone()
-    }
-
-    fn role(&self) -> Role {
-        self.role
-    }
-
-    fn posts(&self) -> Vec<Post> {
-        // self.posts.clone()
-        vec![]
-    }
-}
-
-#[derive(GraphQLObject, Debug, Clone)]
-struct Post {
-    id: i32,
-    title: String,
-}
+use crate::schema::{actor::Actor, role::Role};
+use juniper::{EmptySubscription, GraphQLObject, RootNode};
 
 #[derive(GraphQLObject, Debug, Clone)]
 #[graphql(name = "_Service")]
@@ -53,10 +11,10 @@ struct Service {
     sdl: String,
 }
 
-pub struct QueryRoot;
+pub struct Query;
 
 #[juniper::graphql_object(Context = Context)]
-impl QueryRoot {
+impl Query {
     #[graphql(name = "_service")]
     /// This resolver supports the enhanced introspection query for Apollo Federation.
     fn _service() -> Service {
@@ -82,10 +40,10 @@ impl QueryRoot {
     }
 }
 
-pub struct MutationRoot;
+pub struct Mutation;
 
 #[juniper::graphql_object(Context = Context)]
-impl MutationRoot {
+impl Mutation {
     async fn create_actor(context: &Context, name: String, role: Role) -> Actor {
         sqlx::query!(
             r#"INSERT INTO actors (name, role) VALUES ($1, $2)"#,
@@ -109,10 +67,10 @@ impl MutationRoot {
     }
 }
 
-pub type Schema = RootNode<'static, QueryRoot, MutationRoot, EmptySubscription<Context>>;
+pub type Schema = RootNode<'static, Query, Mutation, EmptySubscription<Context>>;
 
 pub fn create_schema() -> Schema {
-    Schema::new(QueryRoot, MutationRoot, EmptySubscription::new())
+    Schema::new(Query, Mutation, EmptySubscription::new())
 }
 
 pub fn get_schema() -> String {
