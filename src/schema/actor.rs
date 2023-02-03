@@ -29,3 +29,37 @@ impl Actor {
         vec![]
     }
 }
+
+pub(crate) async fn get_actor(context: &Context, id: i32) -> juniper::FieldResult<Option<Actor>> {
+    let actor = sqlx::query_as!(
+        Actor,
+        r#"SELECT id, name, role as "role!: Role" FROM actors WHERE id = $1"#,
+        id
+    )
+    .fetch_optional(&context.pool)
+    .await?;
+
+    Ok(actor)
+}
+
+#[derive(juniper::GraphQLInputObject)]
+pub(crate) struct CreateActorInput {
+    name: String,
+    role: Role,
+}
+
+pub(crate) async fn create_actor(
+    context: &Context,
+    new_actor: CreateActorInput,
+) -> juniper::FieldResult<Actor> {
+    let actor = sqlx::query_as!(
+        Actor,
+        r#"INSERT INTO actors (name, role) VALUES ($1, $2) RETURNING id, name, role as "role!: Role""#,
+        new_actor.name,
+        new_actor.role as Role
+    )
+    .fetch_one(&context.pool)
+    .await?;
+
+    Ok(actor)
+}

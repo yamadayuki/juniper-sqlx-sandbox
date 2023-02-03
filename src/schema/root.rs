@@ -1,8 +1,8 @@
-use crate::context::Context;
-use crate::schema::{actor::Actor, role::Role};
-use juniper::{EmptySubscription, GraphQLObject, RootNode};
+use crate::schema::actor::Actor;
+use crate::{context::Context, schema::actor::CreateActorInput};
+use juniper::{EmptySubscription, FieldResult, RootNode};
 
-#[derive(GraphQLObject, Debug, Clone)]
+#[derive(juniper::GraphQLObject, Debug, Clone)]
 #[graphql(name = "_Service")]
 /// This struct is implementation of the Apollo Federation subgraph specification.
 /// see: https://www.apollographql.com/docs/federation/subgraph-spec/
@@ -17,26 +17,15 @@ pub struct Query;
 impl Query {
     #[graphql(name = "_service")]
     /// This resolver supports the enhanced introspection query for Apollo Federation.
-    fn _service() -> Service {
-        Service { sdl: get_schema() }
+    fn _service() -> FieldResult<Service> {
+        Ok(Service { sdl: get_schema() })
     }
 
     async fn actor(
         context: &Context,
-        #[graphql(desc = "id of the actor")] id: i32,
-    ) -> Option<Actor> {
-        let actor = sqlx::query_as!(
-            Actor,
-            r#"SELECT id, name, role as "role!: Role" FROM actors WHERE id = $1"#,
-            id
-        )
-        .fetch_optional(&context.pool)
-        .await
-        .unwrap();
-
-        dbg!(&actor);
-
-        actor
+        #[graphql(desc = "ID of the actor")] id: i32,
+    ) -> FieldResult<Option<Actor>> {
+        crate::schema::actor::get_actor(context, id).await
     }
 }
 
@@ -44,26 +33,8 @@ pub struct Mutation;
 
 #[juniper::graphql_object(Context = Context)]
 impl Mutation {
-    async fn create_actor(context: &Context, name: String, role: Role) -> Actor {
-        sqlx::query!(
-            r#"INSERT INTO actors (name, role) VALUES ($1, $2)"#,
-            name,
-            role as Role
-        )
-        .execute(&context.pool)
-        .await
-        .unwrap();
-
-        let actor = sqlx::query_as!(
-            Actor,
-            r#"SELECT id, name, role as "role!: Role" FROM actors WHERE name = $1"#,
-            name
-        )
-        .fetch_one(&context.pool)
-        .await
-        .unwrap();
-
-        actor
+    async fn create_actor(context: &Context, new_actor: CreateActorInput) -> FieldResult<Actor> {
+        crate::schema::actor::create_actor(context, new_actor).await
     }
 }
 
