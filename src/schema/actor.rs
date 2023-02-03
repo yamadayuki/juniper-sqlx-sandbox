@@ -1,8 +1,7 @@
-use chrono::TimeZone;
-
 use super::post::Post;
 use super::role::Role;
 use crate::context::Context;
+use chrono::TimeZone;
 
 #[derive(Debug)]
 pub(crate) struct Actor {
@@ -81,4 +80,58 @@ pub(crate) async fn create_actor(
     .await?;
 
     Ok(actor)
+}
+
+impl juniper_relay_connection::RelayConnectionNode for Actor {
+    type Cursor = i32;
+
+    fn cursor(&self) -> Self::Cursor {
+        self.id
+    }
+
+    fn connection_type_name() -> &'static str {
+        "ActorConnection"
+    }
+
+    fn edge_type_name() -> &'static str {
+        "ActorConnectionEdge"
+    }
+}
+
+pub(crate) async fn actors_connection(
+    context: &Context,
+    first: Option<i32>,
+    after: Option<String>,
+    last: Option<i32>,
+    before: Option<String>,
+) -> juniper::FieldResult<juniper_relay_connection::RelayConnection<Actor>> {
+    juniper_relay_connection::RelayConnection::new_async(
+        first,
+        after,
+        last,
+        before,
+        |after, before, limit| async move {
+            let after = after.unwrap_or(0);
+            let before = before.unwrap_or(i32::MAX);
+
+            let query = sqlx::query_as!(
+                Actor,
+                r#"
+            SELECT id, name, role as "role!: Role", created_at, updated_at
+            FROM actors
+            WHERE id > $1 AND id < $2
+            ORDER BY id ASC
+            LIMIT $3
+            "#,
+                after,
+                before,
+                limit
+            );
+
+            let actors = query.fetch_all(&context.pool).await?;
+
+            Ok(actors)
+        },
+    )
+    .await
 }

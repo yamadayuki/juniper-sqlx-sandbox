@@ -1,6 +1,7 @@
 use crate::schema::actor::Actor;
 use crate::{context::Context, schema::actor::CreateActorInput};
 use juniper::{EmptySubscription, FieldResult, RootNode};
+use juniper_relay_connection::RelayConnection;
 
 #[derive(juniper::GraphQLObject, Debug, Clone)]
 #[graphql(name = "_Service")]
@@ -26,6 +27,16 @@ impl Query {
         #[graphql(desc = "ID of the actor")] id: i32,
     ) -> FieldResult<Option<Actor>> {
         crate::schema::actor::get_actor(context, id).await
+    }
+
+    async fn actors(
+        context: &Context,
+        first: Option<i32>,
+        after: Option<String>,
+        last: Option<i32>,
+        before: Option<String>,
+    ) -> FieldResult<RelayConnection<Actor>> {
+        crate::schema::actor::actors_connection(context, first, after, last, before).await
     }
 }
 

@@ -10,5 +10,6 @@ actix-web = "4.3.0"
 chrono = "0.4.23"
 chrono-tz = "0.8.1"
 juniper = "0.15.11"
+juniper_relay_connection = "0.1.1"
 sqlx = { version = "0.6.2", features = ["runtime-tokio-native-tls", "postgres", "chrono"] }
 tokio = { version = "1.25.0", features = ["full"] }
