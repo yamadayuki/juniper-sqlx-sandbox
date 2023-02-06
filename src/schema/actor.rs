@@ -5,7 +5,7 @@ use chrono::TimeZone;
 
 const ACTOR_ID_PREFIX: &str = "Actor:";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Actor {
     pub(crate) id: i32,
     pub(crate) name: String,
@@ -17,7 +17,7 @@ pub(crate) struct Actor {
 #[juniper::graphql_object(Context = Context)]
 impl Actor {
     fn id(&self) -> juniper::ID {
-        format!("{ACTOR_ID_PREFIX}:{}", self.id).into()
+        format!("{ACTOR_ID_PREFIX}{}", self.id).into()
     }
 
     fn name(&self) -> String {
@@ -38,9 +38,65 @@ impl Actor {
 
     // custom resolvers
 
-    fn posts(&self) -> Vec<Post> {
-        // self.posts.clone()
-        vec![]
+    async fn posts(
+        &self,
+        context: &Context,
+        first: Option<i32>,
+        after: Option<String>,
+        last: Option<i32>,
+        before: Option<String>,
+    ) -> juniper::FieldResult<juniper_relay_connection::RelayConnection<Post>> {
+        juniper_relay_connection::RelayConnection::<Post>::new_async(
+            first,
+            after,
+            last,
+            before,
+            |after, before, limit| async move {
+                let after = if let Some(after) = after {
+                    if after.starts_with(crate::schema::post::POST_ID_PREFIX) {
+                        after
+                            .trim_start_matches(crate::schema::post::POST_ID_PREFIX)
+                            .parse::<i32>()?
+                    } else {
+                        0
+                    }
+                } else {
+                    0
+                };
+                let before = if let Some(before) = before {
+                    if before.starts_with(crate::schema::post::POST_ID_PREFIX) {
+                        before
+                            .trim_start_matches(crate::schema::post::POST_ID_PREFIX)
+                            .parse::<i32>()?
+                    } else {
+                        0
+                    }
+                } else {
+                    i32::MAX
+                };
+
+                let query = sqlx::query_as!(
+                    Post,
+                    r#"
+                    SELECT id, title, actor_id, created_at, updated_at
+                    FROM posts
+                    WHERE actor_id = $1
+                    AND id > $2 AND id < $3
+                    ORDER BY id ASC
+                    LIMIT $4
+                    "#,
+                    self.id,
+                    after,
+                    before,
+                    limit.unwrap_or(10)
+                );
+
+                let posts = query.fetch_all(&context.pool).await?;
+
+                Ok(posts)
+            },
+        )
+        .await
     }
 }
 
@@ -97,7 +153,7 @@ impl juniper_relay_connection::RelayConnectionNode for Actor {
     type Cursor = String;
 
     fn cursor(&self) -> Self::Cursor {
-        format!("{ACTOR_ID_PREFIX}:{}", self.id)
+        format!("{ACTOR_ID_PREFIX}{}", self.id)
     }
 
     fn connection_type_name() -> &'static str {

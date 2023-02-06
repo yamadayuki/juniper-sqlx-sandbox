@@ -38,6 +38,16 @@ impl Query {
     ) -> FieldResult<RelayConnection<Actor>> {
         crate::schema::actor::actors_connection(context, first, after, last, before).await
     }
+
+    async fn posts(
+        context: &Context,
+        first: Option<i32>,
+        after: Option<String>,
+        last: Option<i32>,
+        before: Option<String>,
+    ) -> FieldResult<RelayConnection<crate::schema::post::Post>> {
+        crate::schema::post::posts_connection(context, first, after, last, before).await
+    }
 }
 
 pub struct Mutation;
