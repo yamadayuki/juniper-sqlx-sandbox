@@ -1,6 +1,6 @@
 use actix_web::{
     get, route,
-    web::{self, Data},
+    web::{Data, Json},
     App, HttpResponse, HttpServer, Responder,
 };
 use juniper::http::{graphiql::graphiql_source, GraphQLRequest};
@@ -26,9 +26,9 @@ async fn graphql_playground() -> impl Responder {
 
 #[route("/graphql", method = "GET", method = "POST")]
 async fn graphql(
-    pool: web::Data<db::Pool>,
-    schema: web::Data<schema::root::Schema>,
-    data: web::Json<GraphQLRequest>,
+    pool: Data<db::Pool>,
+    schema: Data<schema::root::Schema>,
+    data: Json<GraphQLRequest>,
 ) -> impl Responder {
     let ctx = context::Context {
         pool: pool.get_ref().to_owned(),
@@ -40,11 +40,9 @@ async fn graphql(
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
-    let pool = sqlx::postgres::PgPoolOptions::new()
-        .max_connections(5)
-        .connect("postgres://postgres:postgres@localhost:5432/juniper-sqlx")
-        .await
-        .expect("Failed to connect to database");
+    dotenv::dotenv().ok();
+
+    let pool = create_pg_pool().await?;
 
     let schema = Arc::new(schema::root::create_schema());
 
@@ -59,4 +57,19 @@ async fn main() -> std::io::Result<()> {
     .bind(("127.0.0.1", 8082))?
     .run()
     .await
+}
+
+async fn create_pg_pool() -> std::io::Result<sqlx::postgres::PgPool> {
+    let database_url = std::env::var("DATABASE_URL").map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "DATABASE_URL environment variable is not set",
+        )
+    })?;
+
+    sqlx::postgres::PgPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
 }
